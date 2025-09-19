@@ -1,2 +1,5 @@
 *.pt
 *.safetensors
+llm_cache/
+checkpoints/
+ref_finetune.py
