@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--pred_data_path', type=str, required=True, help='Path to the pred data file.')
 parser.add_argument('-g', '--gold_data_path', type=str, required=True, help='Path to the gold data file.')
 parser.add_argument('-t', '--task', type=int, choices=[1,2,3], required=True, help='Taks name include 1, 2, or 3.')
-
+parser.add_argument('--do_norm', action='store_true')
 args = parser.parse_args()
 
 
@@ -310,7 +310,7 @@ def convert_task1_data(gold_data, pred_data):
                 exit("Error: VA value is missing!")
     return gold_v, gold_a, pred_v, pred_a
 
-def evaluate_predictions_task1(gold_data, pred_data):
+def evaluate_predictions_task1(gold_data, pred_data, is_norm = True):
     if not gold_data or not pred_data:
         print("Error: Failed to load one or both data files. Cannot perform evaluation.")
         return None
@@ -323,10 +323,12 @@ def evaluate_predictions_task1(gold_data, pred_data):
     
     gold_va = gold_v + gold_a
     pred_va = pred_v + pred_a
-    def rmse_norm(gold_va, pred_va):
+    def rmse_norm(gold_va, pred_va, is_normalization = True):
         result = [(a - b)**2 for a, b in zip(gold_va, pred_va)]
-        return math.sqrt(sum(result)/len(gold_v))/math.sqrt(128)
-    rmse_va = rmse_norm(gold_va, pred_va)
+        if is_normalization:
+            return math.sqrt(sum(result)/len(gold_v))/math.sqrt(128)
+        return math.sqrt(sum(result)/len(gold_v))
+    rmse_va = rmse_norm(gold_va, pred_va, is_norm)
     return {
         'PCC_V': pcc_v,
         'PCC_A': pcc_a,
@@ -348,17 +350,9 @@ if __name__ == "__main__":
     
     # Evaluate predictions
     if task == 1:
-        results = evaluate_predictions_task1(gold_data, pred_data)
+        results = evaluate_predictions_task1(gold_data, pred_data, is_norm = args.do_norm)
     else:
         results = evaluate_predictions(gold_data, pred_data, task = task)
     # You can use 'results' for further analysis or reporting
     if results:
         print(f"\nFinal Results: {results}")
-    
-
-
-
-
-    
-
-    
