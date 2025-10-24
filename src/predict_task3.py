@@ -1,307 +1,181 @@
+"""
+Subtask 3 推論腳本。
+"""
+
+from __future__ import annotations
+
 import argparse
 import json
+import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoTokenizer
 
-from .task3_data import NULL_TEXT, NULL_TOKEN, get_bin_center, load_jsonl
-from .task3_models import ValenceArousalModel
+from .data_utils import load_jsonl, save_jsonl
+from .inference_utils import assign_opinions_to_aspects, decode_bio
+from .va_predictor import CodeStyleVAPredictor, DummyVAPredictor, VAPredictorConfig
 
-
-def load_label_mapping(path: Path) -> Dict[int, str]:
-    with path.open("r", encoding="utf-8") as fh:
-        raw = json.load(fh)
-    return {int(k): v for k, v in raw.items()}
-
-
-def decode_entities(
-    logits: torch.Tensor,
-    input_ids: torch.Tensor,
-    offsets: torch.Tensor,
-    tokenizer,
-    text: str,
-    label_map: Dict[int, str],
-    prefix_len: int,
-) -> Tuple[List[Dict[str, int]], List[Dict[str, int]]]:
-    null_id = tokenizer.convert_tokens_to_ids(NULL_TOKEN)
-    cls_id = tokenizer.cls_token_id
-    sep_id = tokenizer.sep_token_id
-    pad_id = tokenizer.pad_token_id
-    preds = logits.argmax(dim=-1).tolist()
-    token_ids = input_ids.tolist()
-    offset_list = offsets.tolist()
-
-    def collect(target: str) -> List[Dict[str, int]]:
-        entities: List[Dict[str, int]] = []
-        current = None
-        for idx, label_id in enumerate(preds):
-            label = label_map.get(label_id, "O")
-            token_id = token_ids[idx]
-            start, end = offset_list[idx]
-            if token_id in (cls_id, sep_id, pad_id):
-                if current:
-                    entities.append(current)
-                    current = None
-                continue
-            if token_id == null_id:
-                if label in (f"B-{target}", f"I-{target}"):
-                    candidate = {"text": NULL_TEXT, "start": -1, "end": -1}
-                    if candidate not in entities:
-                        entities.append(candidate)
-                if current:
-                    entities.append(current)
-                    current = None
-                continue
-            if end <= start:
-                if current:
-                    entities.append(current)
-                    current = None
-                continue
-            if label == f"B-{target}":
-                if current:
-                    entities.append(current)
-                actual_start = max(0, start - prefix_len)
-                actual_end = max(actual_start, end - prefix_len)
-                current = {"text": "", "start": actual_start, "end": actual_end}
-            elif label == f"I-{target}" and current:
-                actual_end = max(current["end"], end - prefix_len)
-                current["end"] = actual_end
-            else:
-                if current:
-                    entities.append(current)
-                    current = None
-        if current:
-            entities.append(current)
-        for entity in entities:
-            if entity["start"] >= 0:
-                entity["text"] = text[entity["start"]:entity["end"]]
-            else:
-                entity["text"] = NULL_TEXT
-        unique: List[Dict[str, int]] = []
-        seen = set()
-        for entity in entities:
-            key = (entity["text"], entity["start"], entity["end"])
-            if key not in seen:
-                seen.add(key)
-                unique.append(entity)
-        return unique
-
-    aspects = collect("ASP")
-    opinions = collect("OPN")
-    return aspects, opinions
-
-
-def classify_pairs(
-    model: AutoModelForSequenceClassification,
-    tokenizer,
-    text: str,
-    aspects: List[Dict[str, int]],
-    opinions: List[Dict[str, int]],
-    label_map: Dict[int, str],
-    max_length: int,
-    device: torch.device,
-) -> List[Dict]:
-    if not aspects or not opinions:
-        return []
-    results: List[Dict] = []
-    with torch.no_grad():
-        for aspect in aspects:
-            for opinion in opinions:
-                aspect_text = aspect["text"]
-                opinion_text = opinion["text"]
-                encoded = tokenizer(
-                    text,
-                    f"{aspect_text} {tokenizer.sep_token} {opinion_text}",
-                    truncation=True,
-                    max_length=max_length,
-                    return_tensors="pt",
-                )
-                batch = {k: v.to(device) for k, v in encoded.items()}
-                logits = model(**batch).logits.squeeze(0)
-                probs = torch.softmax(logits, dim=-1)
-                pred_id = int(torch.argmax(probs).cpu().item())
-                label = label_map[pred_id]
-                if label == "INVALID":
-                    continue
-                confidence = float(probs[pred_id].cpu().item())
-                results.append(
-                    {
-                        "aspect": aspect,
-                        "opinion": opinion,
-                        "category": label,
-                        "confidence": confidence,
-                    }
-                )
-    return results
-
-
-def predict_intensity(
-    model: ValenceArousalModel,
-    tokenizer,
-    text: str,
-    candidates: List[Dict],
-    step: float,
-    max_length: int,
-    device: torch.device,
-) -> List[Dict]:
-    outputs: List[Dict] = []
-    if not candidates:
-        return outputs
-    with torch.no_grad():
-        for candidate in candidates:
-            aspect_text = candidate["aspect"]["text"]
-            opinion_text = candidate["opinion"]["text"]
-            encoded = tokenizer(
-                text,
-                f"{aspect_text} {tokenizer.sep_token} {opinion_text}",
-                truncation=True,
-                max_length=max_length,
-                return_tensors="pt",
-            )
-            batch = {k: v.to(device) for k, v in encoded.items()}
-            forward = model(**batch)
-            valence_logits = forward["valence_logits"].squeeze(0)
-            arousal_logits = forward["arousal_logits"].squeeze(0)
-            valence_score = forward["valence_score"].squeeze(0).cpu().item()
-            arousal_score = forward["arousal_score"].squeeze(0).cpu().item()
-            valence_bin = int(torch.argmax(torch.softmax(valence_logits, dim=-1)).cpu().item())
-            arousal_bin = int(torch.argmax(torch.softmax(arousal_logits, dim=-1)).cpu().item())
-            valence_cls = get_bin_center(valence_bin, step=step)
-            arousal_cls = get_bin_center(arousal_bin, step=step)
-            valence = max(1.0, min(9.0, (valence_score + valence_cls) / 2.0))
-            arousal = max(1.0, min(9.0, (arousal_score + arousal_cls) / 2.0))
-            outputs.append(
-                {
-                    "aspect": candidate["aspect"],
-                    "opinion": candidate["opinion"],
-                    "category": candidate["category"],
-                    "valence": round(valence, 2),
-                    "arousal": round(arousal, 2),
-                }
-            )
-    return outputs
-
-
-def format_output(predictions: List[Dict]) -> List[Dict]:
-    formatted: List[Dict] = []
-    for pred in predictions:
-        aspect_text = pred["aspect"]["text"] if pred["aspect"]["start"] >= 0 else NULL_TEXT
-        opinion_text = pred["opinion"]["text"] if pred["opinion"]["start"] >= 0 else NULL_TEXT
-        formatted.append(
-            {
-                "Aspect": aspect_text,
-                "Category": pred["category"],
-                "Opinion": opinion_text,
-                "VA": f"{pred['valence']:.2f}#{pred['arousal']:.2f}",
-            }
-        )
-    return formatted
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run DimASQP Subtask3 inference.")
-    parser.add_argument("--model-root", type=Path, required=True, help="Directory with trained models.")
-    parser.add_argument("--input-path", type=Path, required=True, help="Input jsonl file.")
-    parser.add_argument("--output-path", type=Path, required=True, help="Output jsonl file.")
-    parser.add_argument("--relation-max-length", type=int, default=192, help="Max length for relation classifier.")
-    parser.add_argument("--intensity-max-length", type=int, default=192, help="Max length for intensity predictor.")
-    parser.add_argument("--tagger-max-length", type=int, default=256, help="Max length for sequence tagger.")
+    parser = argparse.ArgumentParser(description="Run DimASQP prediction pipeline.")
+    parser.add_argument("--model-root", required=True, help="訓練輸出根目錄")
+    parser.add_argument("--input-path", required=True, help="輸入 JSONL 檔")
+    parser.add_argument("--output-path", required=True, help="輸出 JSONL 檔")
+    parser.add_argument("--device", default=None, help="推論裝置 (cpu / cuda)")
+    parser.add_argument("--va-model-name", help="LLM 模型名稱或路徑")
+    parser.add_argument("--va-max-new-tokens", type=int, default=8)
+    parser.add_argument("--va-temperature", type=float, default=0.7)
+    parser.add_argument("--va-top-p", type=float, default=0.9)
+    parser.add_argument("--va-load-in-4bit", action="store_true", help="以 4bit 量化載入 LLM")
+    parser.add_argument("--va-load-in-8bit", action="store_true", help="以 8bit 量化載入 LLM")
+    parser.add_argument("--va-cache-dir", help="LLM cache 目錄")
     return parser.parse_args()
 
 
-def load_metadata(root: Path) -> Dict:
-    meta_path = root / "metadata.json"
-    if meta_path.exists():
-        with meta_path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    return {}
+def get_id2label(config) -> dict[int, str]:
+    raw = config.id2label
+    if isinstance(raw, dict):
+        return {int(k): v for k, v in raw.items()}
+    return {idx: label for idx, label in enumerate(raw)}
 
 
-def main() -> None:
+def build_predictor(args: argparse.Namespace):
+    if args.va_model_name:
+        config = VAPredictorConfig(
+            model_name_or_path=args.va_model_name,
+            device=args.device,
+            max_new_tokens=args.va_max_new_tokens,
+            temperature=args.va_temperature,
+            top_p=args.va_top_p,
+            load_in_4bit=args.va_load_in_4bit,
+            load_in_8bit=args.va_load_in_8bit,
+            cache_dir=args.va_cache_dir,
+        )
+        LOGGER.info("使用 LLM 進行 VA 回歸：%s", args.va_model_name)
+        return CodeStyleVAPredictor(config)
+    LOGGER.warning("未指定 LLM，使用 DummyVAPredictor (固定 5.0#5.0)")
+    return DummyVAPredictor()
+
+
+def move_to_device(batch: dict[str, torch.Tensor], device: torch.device):
+    return {k: v.to(device) for k, v in batch.items()}
+
+
+def main():
     args = parse_args()
-    metadata = load_metadata(args.model_root)
-    tagger_dir = args.model_root / "tagger"
-    relation_dir = args.model_root / "relation"
-    intensity_dir = args.model_root / "intensity"
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+    device = torch.device(args.device) if args.device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(tagger_dir)
-    tagger = AutoModelForTokenClassification.from_pretrained(tagger_dir)
-    relation_model = AutoModelForSequenceClassification.from_pretrained(relation_dir)
-    intensity_model = ValenceArousalModel.from_pretrained(intensity_dir)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tagger.to(device).eval()
-    relation_model.to(device).eval()
-    intensity_model.to(device).eval()
-
-    tagger_labels = load_label_mapping(tagger_dir / "tag_labels.json")
-    relation_labels = load_label_mapping(relation_dir / "relation_labels.json")
-
-    intensity_config = intensity_dir / "intensity_bins.json"
-    if intensity_config.exists():
-        with intensity_config.open("r", encoding="utf-8") as fh:
-            config_data = json.load(fh)
-        bin_step = float(config_data.get("step", 0.25))
+    model_root = Path(args.model_root)
+    meta_path = model_root / "metadata.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        aspect_dir = Path(meta["aspect_dir"])
+        opinion_dir = Path(meta["opinion_dir"])
+        category_dir = Path(meta["category_dir"])
     else:
-        bin_step = 0.25
+        aspect_dir = model_root / "aspect_extractor"
+        opinion_dir = model_root / "opinion_extractor"
+        category_dir = model_root / "category_classifier"
 
-    tagger_max_length = int(metadata.get("tagger_max_length", args.tagger_max_length))
-    relation_max_length = int(metadata.get("relation_max_length", args.relation_max_length))
-    intensity_max_length = int(metadata.get("intensity_max_length", args.intensity_max_length))
+    LOGGER.info("載入 Aspect 抽取模型：%s", aspect_dir)
+    aspect_model = AutoModelForTokenClassification.from_pretrained(aspect_dir).to(device)
+    aspect_model.eval()
+    aspect_tokenizer = AutoTokenizer.from_pretrained(aspect_dir)
+    aspect_id2label = get_id2label(aspect_model.config)
+
+    LOGGER.info("載入 Opinion 抽取模型：%s", opinion_dir)
+    opinion_model = AutoModelForTokenClassification.from_pretrained(opinion_dir).to(device)
+    opinion_model.eval()
+    opinion_tokenizer = AutoTokenizer.from_pretrained(opinion_dir)
+    opinion_id2label = get_id2label(opinion_model.config)
+
+    LOGGER.info("載入 Category 分類模型：%s", category_dir)
+    category_model = AutoModelForSequenceClassification.from_pretrained(category_dir).to(device)
+    category_model.eval()
+    category_tokenizer = AutoTokenizer.from_pretrained(category_dir)
+    category_id2label = get_id2label(category_model.config)
+
+    va_predictor = build_predictor(args)
 
     inputs = load_jsonl(args.input_path)
-    prefix_len = len(f"{NULL_TOKEN} ")
+    outputs = []
+    cache = {}
+    for sample in inputs:
+        text = sample["Text"]
+        # Aspect
+        aspect_encoded = aspect_tokenizer(
+            text,
+            return_offsets_mapping=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+        aspect_offsets = aspect_encoded.pop("offset_mapping")[0].tolist()
+        aspect_inputs = move_to_device(aspect_encoded, device)
+        with torch.no_grad():
+            aspect_logits = aspect_model(**aspect_inputs).logits
+        aspect_pred = aspect_logits.argmax(dim=-1)[0].tolist()
+        aspects = decode_bio(aspect_pred, aspect_offsets, aspect_id2label, "B-ASPECT", "I-ASPECT", text)
 
-    with args.output_path.open("w", encoding="utf-8") as out_fh:
-        for item in inputs:
-            augmented = f"{NULL_TOKEN} {item.text}"
-            encoded = tokenizer(
-                augmented,
-                return_offsets_mapping=True,
-                return_tensors="pt",
+        # Opinion
+        opinion_encoded = opinion_tokenizer(
+            text,
+            return_offsets_mapping=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+        opinion_offsets = opinion_encoded.pop("offset_mapping")[0].tolist()
+        opinion_inputs = move_to_device(opinion_encoded, device)
+        with torch.no_grad():
+            opinion_logits = opinion_model(**opinion_inputs).logits
+        opinion_pred = opinion_logits.argmax(dim=-1)[0].tolist()
+        opinions = decode_bio(opinion_pred, opinion_offsets, opinion_id2label, "B-OPINION", "I-OPINION", text)
+
+        if opinions and not aspects:
+            aspects = [{"text": text, "start": 0, "end": len(text)}]
+        if aspects and not opinions:
+            opinions = [{"text": text, "start": 0, "end": len(text)}]
+
+        # Category for each aspect
+        aspect_categories = {}
+        for asp in aspects:
+            key = (asp["text"], asp["start"], asp["end"])
+            encoded = category_tokenizer(
+                asp["text"],
+                text,
                 truncation=True,
-                max_length=tagger_max_length,
+                return_tensors="pt",
             )
-            offsets = encoded.pop("offset_mapping")[0]
-            encoded = {k: v.to(device) for k, v in encoded.items()}
+            encoded = move_to_device(encoded, device)
             with torch.no_grad():
-                logits = tagger(**encoded).logits.squeeze(0)
-            aspects, opinions = decode_entities(
-                logits,
-                encoded["input_ids"].squeeze(0).cpu(),
-                offsets.cpu(),
-                tokenizer,
-                item.text,
-                tagger_labels,
-                prefix_len,
+                logits = category_model(**encoded).logits
+            label_id = int(logits.argmax(dim=-1).item())
+            category = category_id2label[label_id]
+            aspect_categories[key] = category
+
+        quadruplets = []
+        for asp, opn in assign_opinions_to_aspects(aspects, opinions):
+            key = (asp["text"], asp["start"], asp["end"])
+            category = aspect_categories.get(key, "LAPTOP#GENERAL")
+            cache_key = (text, asp["text"], opn["text"])
+            if cache_key not in cache:
+                cache[cache_key] = va_predictor.predict(text, asp["text"], opn["text"])
+            va_string = cache[cache_key]
+            quadruplets.append(
+                {
+                    "Aspect": asp["text"],
+                    "Category": category,
+                    "Opinion": opn["text"],
+                    "VA": va_string,
+                }
             )
-            relation_candidates = classify_pairs(
-                relation_model,
-                tokenizer,
-                item.text,
-                aspects,
-                opinions,
-                relation_labels,
-                relation_max_length,
-                device,
-            )
-            intensity_predictions = predict_intensity(
-                intensity_model,
-                tokenizer,
-                item.text,
-                relation_candidates,
-                step=bin_step,
-                max_length=intensity_max_length,
-                device=device,
-            )
-            quadruplets = format_output(intensity_predictions)
-            out_record = {
-                "ID": item.idx,
-                "Quadruplet": quadruplets,
-            }
-            out_fh.write(json.dumps(out_record, ensure_ascii=False) + "\n")
+        outputs.append({"ID": sample["ID"], "Quadruplet": quadruplets})
+
+    save_jsonl(args.output_path, outputs)
+    LOGGER.info("推論完成，結果寫入 %s", args.output_path)
 
 
 if __name__ == "__main__":

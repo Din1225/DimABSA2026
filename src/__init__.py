@@ -1,1 +1,6 @@
-"""Utility package for DimABSA Subtask 3 pipeline."""
+"""
+DimASQP pipeline package.
+
+This module exposes shared constants and utilities for training and inference.
+"""
+
