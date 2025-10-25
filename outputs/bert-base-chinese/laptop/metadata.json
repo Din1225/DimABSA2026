@@ -1,0 +1,6 @@
+{
+  "model_name": "google-bert/bert-base-chinese",
+  "aspect_dir": "outputs/bert-base-chinese/laptop/aspect_extractor",
+  "opinion_dir": "outputs/bert-base-chinese/laptop/opinion_extractor",
+  "category_dir": "outputs/bert-base-chinese/laptop/category_classifier"
+}

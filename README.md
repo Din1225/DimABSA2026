@@ -9,9 +9,9 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 python -m src.train_task3 \
   --train-path data/train/zho_laptop_train_alltasks.jsonl \
   --dev-path data/dev/zho_laptop_dev_task3.jsonl \
-  --output-dir outputs/laptop \
+  --output-dir outputs/bert-base-chinese/laptop\
   --model-name google-bert/bert-base-chinese \
-  --num-epochs 30 \
+  --num-epochs 5 \
   --train-batch-size 8 \
   --learning-rate 1e-5
 ```
@@ -20,9 +20,9 @@ python -m src.train_task3 \
 python -m src.train_task3 \
   --train-path data/train/zho_restaurant_train_alltasks.jsonl \
   --dev-path data/dev/zho_restaurant_dev_task3.jsonl \
-  --output-dir outputs/restaurant \
+  --output-dir outputs/bert-base-chinese/restaurant \
   --model-name google-bert/bert-base-chinese \
-  --num-epochs 30 \
+  --num-epochs 5 \
   --train-batch-size 8 \
   --learning-rate 1e-5
 ```
@@ -32,10 +32,10 @@ python -m src.train_task3 \
 python -m src.finetune_va \
   --train-path data/train/zho_laptop_train_alltasks.jsonl \
   --eval-path data/dev/zho_laptop_dev_task3.jsonl \
-  --output-dir outputs/laptop_va_Llama-3.1-8B-Instruct \
+  --output-dir outputs/Llama-3.1-8B-Instruct/laptop_va_Llama-3.1-8B-Instruct \
   --base-model meta-llama/Llama-3.1-8B-Instruct \
   --cache-dir /workplace/Share/LLM_model \
-  --num-epochs 1 \
+  --num-epochs 5 \
   --per-device-train-batch-size 1 \
  --gradient-accumulation-steps 8
 ```
@@ -45,10 +45,10 @@ python -m src.finetune_va \
 python -m src.finetune_va \
   --train-path data/train/zho_restaurant_train_alltasks.jsonl \
   --eval-path data/dev/zho_restaurant_dev_task3.jsonl \
-  --output-dir outputs/restaurant_va_Llama-3.1-8B-Instruct \
+  --output-dir outputs/Llama-3.1-8B-Instruct/restaurant_va_Llama-3.1-8B-Instruct \
   --base-model meta-llama/Llama-3.1-8B-Instruct \
   --cache-dir /workplace/Share/LLM_model \
-  --num-epochs 1 \
+  --num-epochs 5 \
   --per-device-train-batch-size 1 \
  --gradient-accumulation-steps 8
 ```
@@ -60,10 +60,10 @@ python -m src.finetune_va \
 ### 推論（筆電）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/laptop \
+  --model-root outputs/bert-base-chinese/laptop \
   --input-path data/dev/zho_laptop_dev_task3.jsonl \
   --output-path outputs/laptop_dev_pred.jsonl \
-  --va-model-name outputs/laptop_va_Llama-3.1-8B-Instruct \
+  --va-model-name outputs/Llama-3.1-8B-Instruct/laptop_va_Llama-3.1-8B-Instruct \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
@@ -71,10 +71,10 @@ python -m src.predict_task3 \
 ### 推論（餐廳）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/restaurant \
+  --model-root outputs/bert-base-chinese/restaurant \
   --input-path data/dev/zho_restaurant_dev_task3.jsonl \
   --output-path outputs/restaurant_dev_pred.jsonl \
-  --va-model-name outputs/restaurant_va_Llama-3.1-8B-Instruct \
+  --va-model-name outputs/Llama-3.1-8B-Instruct/restaurant_va_Llama-3.1-8B-Instruct \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
@@ -86,4 +86,10 @@ python -m src.predict_task3 \
 python -m src.postprocess_va \
   --input-path outputs/laptop_dev_pred.jsonl \
   --output-path outputs/laptop_dev_pred_2dec.jsonl
+```
+### 後處理 VA 的數值 (餐廳)
+```bash
+python -m src.postprocess_va \
+  --input-path outputs/restaurant_dev_pred.jsonl \
+  --output-path outputs/restaurant_dev_pred_2dec.jsonl
 ```
