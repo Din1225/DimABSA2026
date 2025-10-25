@@ -1,0 +1,6 @@
+{
+  "model_name": "IDEA-CCNL/Erlangshen-DeBERTa-v2-320M-Chinese",
+  "aspect_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/restaurant/aspect_extractor",
+  "opinion_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/restaurant/opinion_extractor",
+  "category_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/restaurant/category_classifier"
+}
