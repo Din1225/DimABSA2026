@@ -1,0 +1,6 @@
+{
+  "model_name": "hfl/chinese-roberta-wwm-ext-large",
+  "aspect_dir": "outputs/chinese-roberta-wwm-ext-large/restaurant/aspect_extractor",
+  "opinion_dir": "outputs/chinese-roberta-wwm-ext-large/restaurant/opinion_extractor",
+  "category_dir": "outputs/chinese-roberta-wwm-ext-large/restaurant/category_classifier"
+}

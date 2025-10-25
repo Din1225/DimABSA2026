@@ -1,0 +1,6 @@
+{
+  "model_name": "hfl/chinese-roberta-wwm-ext-large",
+  "aspect_dir": "outputs/chinese-roberta-wwm-ext-large/laptop/aspect_extractor",
+  "opinion_dir": "outputs/chinese-roberta-wwm-ext-large/laptop/opinion_extractor",
+  "category_dir": "outputs/chinese-roberta-wwm-ext-large/laptop/category_classifier"
+}

@@ -9,8 +9,8 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 python -m src.train_task3 \
   --train-path data/train/zho_laptop_train_alltasks.jsonl \
   --dev-path data/dev/zho_laptop_dev_task3.jsonl \
-  --output-dir outputs/bert-base-chinese/laptop\
-  --model-name google-bert/bert-base-chinese \
+  --output-dir outputs/Erlangshen-DeBERTa-v2-320M-Chinese/laptop\
+  --model-name IDEA-CCNL/Erlangshen-DeBERTa-v2-320M-Chinese \
   --num-epochs 5 \
   --train-batch-size 8 \
   --learning-rate 1e-5
@@ -20,8 +20,8 @@ python -m src.train_task3 \
 python -m src.train_task3 \
   --train-path data/train/zho_restaurant_train_alltasks.jsonl \
   --dev-path data/dev/zho_restaurant_dev_task3.jsonl \
-  --output-dir outputs/bert-base-chinese/restaurant \
-  --model-name google-bert/bert-base-chinese \
+  --output-dir outputs/Erlangshen-DeBERTa-v2-320M-Chinese/restaurant \
+  --model-name IDEA-CCNL/Erlangshen-DeBERTa-v2-320M-Chinese \
   --num-epochs 5 \
   --train-batch-size 8 \
   --learning-rate 1e-5
@@ -60,7 +60,7 @@ python -m src.finetune_va \
 ### 推論（筆電）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/bert-base-chinese/laptop \
+  --model-root outputs/ernie-3.0-xbase-zh/laptop \
   --input-path data/dev/zho_laptop_dev_task3.jsonl \
   --output-path outputs/laptop_dev_pred.jsonl \
   --va-model-name outputs/Llama-3.1-8B-Instruct/laptop_va_Llama-3.1-8B-Instruct \
@@ -71,7 +71,7 @@ python -m src.predict_task3 \
 ### 推論（餐廳）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/bert-base-chinese/restaurant \
+  --model-root outputs/ernie-3.0-xbase-zh/restaurant \
   --input-path data/dev/zho_restaurant_dev_task3.jsonl \
   --output-path outputs/restaurant_dev_pred.jsonl \
   --va-model-name outputs/Llama-3.1-8B-Instruct/restaurant_va_Llama-3.1-8B-Instruct \

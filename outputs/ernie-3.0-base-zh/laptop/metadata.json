@@ -1,0 +1,6 @@
+{
+  "model_name": "nghuyong/ernie-3.0-base-zh",
+  "aspect_dir": "outputs/ernie-3.0-base-zh/laptop/aspect_extractor",
+  "opinion_dir": "outputs/ernie-3.0-base-zh/laptop/opinion_extractor",
+  "category_dir": "outputs/ernie-3.0-base-zh/laptop/category_classifier"
+}

@@ -1,0 +1,6 @@
+{
+  "model_name": "nghuyong/ernie-3.0-base-zh",
+  "aspect_dir": "outputs/ernie-3.0-base-zh/restaurant/aspect_extractor",
+  "opinion_dir": "outputs/ernie-3.0-base-zh/restaurant/opinion_extractor",
+  "category_dir": "outputs/ernie-3.0-base-zh/restaurant/category_classifier"
+}
