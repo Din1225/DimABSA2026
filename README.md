@@ -60,7 +60,7 @@ python -m src.finetune_va \
 ### 推論（筆電）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/ernie-3.0-xbase-zh/laptop \
+  --model-root outputs/Erlangshen-DeBERTa-v2-320M-Chinese/laptop \
   --input-path data/dev/zho_laptop_dev_task3.jsonl \
   --output-path outputs/laptop_dev_pred.jsonl \
   --va-model-name outputs/Llama-3.1-8B-Instruct/laptop_va_Llama-3.1-8B-Instruct \
@@ -71,7 +71,7 @@ python -m src.predict_task3 \
 ### 推論（餐廳）
 ```bash
 python -m src.predict_task3 \
-  --model-root outputs/ernie-3.0-xbase-zh/restaurant \
+  --model-root outputs/Erlangshen-DeBERTa-v2-320M-Chinese/restaurant \
   --input-path data/dev/zho_restaurant_dev_task3.jsonl \
   --output-path outputs/restaurant_dev_pred.jsonl \
   --va-model-name outputs/Llama-3.1-8B-Instruct/restaurant_va_Llama-3.1-8B-Instruct \

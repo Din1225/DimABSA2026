@@ -1,0 +1,6 @@
+{
+  "model_name": "IDEA-CCNL/Erlangshen-DeBERTa-v2-320M-Chinese",
+  "aspect_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/laptop/aspect_extractor",
+  "opinion_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/laptop/opinion_extractor",
+  "category_dir": "outputs/Erlangshen-DeBERTa-v2-320M-Chinese/laptop/category_classifier"
+}
