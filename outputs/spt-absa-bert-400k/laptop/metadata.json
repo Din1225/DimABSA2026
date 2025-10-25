@@ -1,0 +1,6 @@
+{
+  "model_name": "zhang-yice/spt-absa-bert-400k",
+  "aspect_dir": "outputs/spt-absa-bert-400k/laptop/aspect_extractor",
+  "opinion_dir": "outputs/spt-absa-bert-400k/laptop/opinion_extractor",
+  "category_dir": "outputs/spt-absa-bert-400k/laptop/category_classifier"
+}
