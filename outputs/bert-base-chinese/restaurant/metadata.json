@@ -2,5 +2,6 @@
   "model_name": "google-bert/bert-base-chinese",
   "aspect_dir": "outputs/bert-base-chinese/restaurant/aspect_extractor",
   "opinion_dir": "outputs/bert-base-chinese/restaurant/opinion_extractor",
-  "category_dir": "outputs/bert-base-chinese/restaurant/category_classifier"
+  "category_dir": "outputs/bert-base-chinese/restaurant/category_classifier",
+  "relation_dir": "outputs/bert-base-chinese/restaurant/relation_classifier"
 }

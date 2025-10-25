@@ -24,9 +24,16 @@ from transformers import (
     set_seed,
 )
 
-from .constants import ASPECT_TAGS, OPINION_TAGS, CATEGORY2ID, ID2CATEGORY
+from .constants import (
+    ASPECT_TAGS,
+    OPINION_TAGS,
+    CATEGORY2ID,
+    ID2CATEGORY,
+    RELATION2ID,
+    ID2RELATION,
+)
 from .data_utils import load_jsonl
-from .datasets import AspectCategoryDataset, TokenTaggingDataset
+from .datasets import AspectCategoryDataset, AspectOpinionPairDataset, TokenTaggingDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +51,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-length", type=int, default=256)
+    parser.add_argument("--train-pair-path", required=True, help="Aspect-Opinion relation 訓練資料 JSONL")
+    parser.add_argument("--dev-pair-path", help="Aspect-Opinion relation 驗證資料 JSONL")
     return parser.parse_args()
 
 
@@ -134,6 +143,45 @@ def train_category_classifier(
     tokenizer.save_pretrained(training_args.output_dir)
 
 
+def train_relation_classifier(
+    model_name: str,
+    tokenizer,
+    train_data,
+    dev_data,
+    training_args: TrainingArguments,
+    max_length: int,
+) -> None:
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        num_labels=len(RELATION2ID),
+        id2label=ID2RELATION,
+        label2id=RELATION2ID,
+    )
+    train_dataset = AspectOpinionPairDataset(train_data, tokenizer, RELATION2ID, max_length=max_length)
+    if len(train_dataset) == 0:
+        LOGGER.warning("Relation 訓練資料為空，跳過")
+        return
+    eval_dataset = (
+        AspectOpinionPairDataset(dev_data, tokenizer, RELATION2ID, max_length=max_length)
+        if dev_data is not None
+        else None
+    )
+    collator = DataCollatorWithPadding(tokenizer)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        data_collator=collator,
+        tokenizer=tokenizer,
+    )
+    trainer.train()
+    trainer.save_model(training_args.output_dir)
+    tokenizer.save_pretrained(training_args.output_dir)
+    label_path = Path(training_args.output_dir, "relation_label2id.json")
+    with label_path.open("w", encoding="utf-8") as f:
+        json.dump(RELATION2ID, f, ensure_ascii=False, indent=2)
+
+
 def load_splits(train_path: str, dev_path: Optional[str]):
     train_data = load_jsonl(train_path)
     dev_data = load_jsonl(dev_path) if dev_path else None
@@ -186,12 +234,16 @@ def main():
     aspect_dir = output_root / "aspect_extractor"
     opinion_dir = output_root / "opinion_extractor"
     category_dir = output_root / "category_classifier"
+    relation_dir = output_root / "relation_classifier"
     aspect_dir.mkdir(exist_ok=True)
     opinion_dir.mkdir(exist_ok=True)
     category_dir.mkdir(exist_ok=True)
+    relation_dir.mkdir(exist_ok=True)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     train_data, dev_data = load_splits(args.train_path, args.dev_path)
+    train_pair_data = load_jsonl(args.train_pair_path)
+    dev_pair_data = load_jsonl(args.dev_pair_path) if args.dev_pair_path else None
 
     LOGGER.info("開始訓練 Aspect 抽取模型")
     has_dev = dev_data is not None
@@ -249,11 +301,31 @@ def main():
     )
     train_category_classifier(args.model_name, tokenizer, train_data, dev_data, category_args, args.max_length)
 
+    LOGGER.info("開始訓練 Relation 分類模型")
+    relation_args = make_training_args(
+        relation_dir,
+        args.num_epochs,
+        args.train_batch_size,
+        args.eval_batch_size,
+        args.learning_rate,
+        args.weight_decay,
+        dev_pair_data is not None,
+    )
+    train_relation_classifier(
+        args.model_name,
+        tokenizer,
+        train_pair_data,
+        dev_pair_data,
+        relation_args,
+        args.max_length,
+    )
+
     meta = {
         "model_name": args.model_name,
         "aspect_dir": str(aspect_dir),
         "opinion_dir": str(opinion_dir),
         "category_dir": str(category_dir),
+        "relation_dir": str(relation_dir),
     }
     with (output_root / "metadata.json").open("w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)

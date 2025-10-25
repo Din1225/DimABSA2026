@@ -4,11 +4,30 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 
 ## 執行方式
 
+### 建立 Relation 訓練資料（筆電）
+```bash
+python -m src.build_relation_dataset \
+  --input-path data/train/zho_laptop_train_alltasks.jsonl \
+  --output-path data/train/zho_laptop_train_task3_pairs.jsonl \
+  --model-name google-bert/bert-base-chinese \
+  --num-folds 5
+```
+> 依論文方法使用 k-fold 建立正負樣本。餐廳資料請替換相對應路徑與輸出名稱。
+### 建立 Relation 訓練資料（餐廳）
+```bash
+python -m src.build_relation_dataset \
+  --input-path data/train/zho_restaurant_train_alltasks.jsonl \
+  --output-path data/train/zho_restaurant_train_task3_pairs.jsonl \
+  --model-name google-bert/bert-base-chinese \
+  --num-folds 5
+```
+
 ### 訓練 BERT（筆電）
 ```bash
 python -m src.train_task3 \
   --train-path data/train/zho_laptop_train_alltasks.jsonl \
   --dev-path data/dev/zho_laptop_dev_task3.jsonl \
+  --train-pair-path data/train/zho_laptop_train_task3_pairs.jsonl \
   --output-dir outputs/bert-base-chinese/laptop\
   --model-name google-bert/bert-base-chinese \
   --num-epochs 5 \
@@ -20,6 +39,7 @@ python -m src.train_task3 \
 python -m src.train_task3 \
   --train-path data/train/zho_restaurant_train_alltasks.jsonl \
   --dev-path data/dev/zho_restaurant_dev_task3.jsonl \
+  --train-pair-path data/train/zho_restaurant_train_task3_pairs.jsonl \
   --output-dir outputs/bert-base-chinese/restaurant \
   --model-name google-bert/bert-base-chinese \
   --num-epochs 5 \
@@ -79,7 +99,7 @@ python -m src.predict_task3 \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
 
-`src.predict_task3` 會順序完成 aspect/opinion 抽取、aspect category 分類與 LLM-based VA 估計。若要啟用 LLM，請提供本地或快取好的模型路徑，並確保與 `transformers` 相容。
+`src.predict_task3` 會順序完成 aspect/opinion 抽取、relation 分類（同時決定配對與類別）與 LLM-based VA 估計。若 relation 模型預測不到有效配對，系統會退回舊版類別分類流程。若要啟用 LLM，請提供本地或快取好的模型路徑，並確保與 `transformers` 相容。
 
 ### 後處理 VA 的數值 (筆電為例)
 ```bash

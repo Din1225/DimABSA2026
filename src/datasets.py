@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 import torch
 from torch.utils.data import Dataset
 
-from .data_utils import collect_aspect_spans, collect_opinion_spans
+from .data_utils import build_marked_text, collect_aspect_spans, collect_opinion_spans
 
 
 def _encode_token_labels(
@@ -110,6 +110,48 @@ class AspectCategoryDataset(Dataset):
                 )
                 self.encodings.append({k: torch.tensor(v) for k, v in enc.items()})
                 self.labels.append(label2id[category])
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        item = {k: v.clone().detach() for k, v in self.encodings[idx].items()}
+        item["labels"] = torch.tensor(self.labels[idx], dtype=torch.long)
+        return item
+
+
+class AspectOpinionPairDataset(Dataset):
+    """Aspect-Opinion relation 資料集（含 Invalid 負樣本）。"""
+
+    def __init__(
+        self,
+        samples: List[dict[str, Any]],
+        tokenizer,
+        label2id: dict[str, int],
+        max_length: int = 256,
+    ) -> None:
+        self.encodings: List[Dict[str, Any]] = []
+        self.labels: List[int] = []
+        sep = tokenizer.sep_token or "[SEP]"
+        for sample in samples:
+            text = sample["Text"]
+            aspect_span = sample.get("Aspect") or {}
+            opinion_span = sample.get("Opinion") or {}
+            label = (sample.get("Label") or "").strip().upper()
+            if label not in label2id:
+                continue
+            aspect_text = aspect_span.get("text", "").strip()
+            opinion_text = opinion_span.get("text", "").strip()
+            marked = build_marked_text(text, aspect_span, opinion_span)
+            pair_repr = f"{aspect_text} {sep} {opinion_text}".strip()
+            enc = tokenizer(
+                marked,
+                pair_repr,
+                truncation=True,
+                max_length=max_length,
+            )
+            self.encodings.append({k: torch.tensor(v) for k, v in enc.items()})
+            self.labels.append(label2id[label])
 
     def __len__(self) -> int:
         return len(self.labels)

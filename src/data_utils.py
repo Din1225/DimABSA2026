@@ -108,3 +108,35 @@ def collect_aspect_spans(text: str, quads: Iterable[dict[str, Any]]) -> list[dic
 def collect_opinion_spans(text: str, quads: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return extract_spans_from_quads(text, quads, "Opinion")
 
+
+def build_marked_text(
+    text: str,
+    aspect_span: dict[str, Any] | None,
+    opinion_span: dict[str, Any] | None,
+    aspect_markers: tuple[str, str] = ("[ASP]", "[/ASP]"),
+    opinion_markers: tuple[str, str] = ("[OPN]", "[/OPN]"),
+) -> str:
+    """在原句中插入標記，形成 S′，以凸顯 aspect 與 opinion 邊界。"""
+    insertions: list[tuple[int, str]] = []
+    if aspect_span is not None and aspect_span.get("start") is not None and aspect_span.get("end") is not None:
+        start = int(aspect_span["start"])
+        end = int(aspect_span["end"])
+        insertions.append((end, aspect_markers[1]))
+        insertions.append((start, aspect_markers[0]))
+    if opinion_span is not None and opinion_span.get("start") is not None and opinion_span.get("end") is not None:
+        start = int(opinion_span["start"])
+        end = int(opinion_span["end"])
+        insertions.append((end, opinion_markers[1]))
+        insertions.append((start, opinion_markers[0]))
+    if not insertions:
+        return text
+    # 由後往前插入，避免索引偏移
+    insertions.sort(key=lambda x: x[0], reverse=True)
+    marked = text
+    for idx, marker in insertions:
+        if idx < 0:
+            idx = 0
+        if idx > len(marked):
+            idx = len(marked)
+        marked = marked[:idx] + marker + marked[idx:]
+    return marked

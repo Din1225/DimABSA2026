@@ -12,7 +12,8 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoTokenizer
 
-from .data_utils import load_jsonl, save_jsonl
+from .constants import INVALID_CATEGORY
+from .data_utils import build_marked_text, load_jsonl, save_jsonl
 from .inference_utils import assign_opinions_to_aspects, decode_bio
 from .va_predictor import CodeStyleVAPredictor, DummyVAPredictor, VAPredictorConfig
 
@@ -71,15 +72,18 @@ def main():
 
     model_root = Path(args.model_root)
     meta_path = model_root / "metadata.json"
+    relation_dir = model_root / "relation_classifier"
     if meta_path.exists():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         aspect_dir = Path(meta["aspect_dir"])
         opinion_dir = Path(meta["opinion_dir"])
-        category_dir = Path(meta["category_dir"])
+        category_dir = Path(meta.get("category_dir", model_root / "category_classifier"))
+        relation_dir = Path(meta.get("relation_dir", relation_dir))
     else:
         aspect_dir = model_root / "aspect_extractor"
         opinion_dir = model_root / "opinion_extractor"
         category_dir = model_root / "category_classifier"
+        relation_dir = model_root / "relation_classifier"
 
     LOGGER.info("載入 Aspect 抽取模型：%s", aspect_dir)
     aspect_model = AutoModelForTokenClassification.from_pretrained(aspect_dir).to(device)
@@ -93,11 +97,29 @@ def main():
     opinion_tokenizer = AutoTokenizer.from_pretrained(opinion_dir)
     opinion_id2label = get_id2label(opinion_model.config)
 
-    LOGGER.info("載入 Category 分類模型：%s", category_dir)
-    category_model = AutoModelForSequenceClassification.from_pretrained(category_dir).to(device)
-    category_model.eval()
-    category_tokenizer = AutoTokenizer.from_pretrained(category_dir)
-    category_id2label = get_id2label(category_model.config)
+    relation_model = None
+    relation_tokenizer = None
+    relation_id2label: dict[int, str] | None = None
+    if relation_dir.exists():
+        LOGGER.info("載入 Relation 分類模型：%s", relation_dir)
+        relation_model = AutoModelForSequenceClassification.from_pretrained(relation_dir).to(device)
+        relation_model.eval()
+        relation_tokenizer = AutoTokenizer.from_pretrained(relation_dir)
+        relation_id2label = get_id2label(relation_model.config)
+    else:
+        LOGGER.warning("找不到 Relation 分類模型，將使用既有 Category pipeline：%s", relation_dir)
+
+    category_model = None
+    category_tokenizer = None
+    category_id2label: dict[int, str] | None = None
+    if category_dir.exists():
+        LOGGER.info("載入 Category 分類模型：%s", category_dir)
+        category_model = AutoModelForSequenceClassification.from_pretrained(category_dir).to(device)
+        category_model.eval()
+        category_tokenizer = AutoTokenizer.from_pretrained(category_dir)
+        category_id2label = get_id2label(category_model.config)
+    else:
+        LOGGER.warning("找不到 Category 分類模型，fallback 可能失效：%s", category_dir)
 
     va_predictor = build_predictor(args)
 
@@ -139,27 +161,70 @@ def main():
         if aspects and not opinions:
             opinions = [{"text": text, "start": 0, "end": len(text)}]
 
-        # Category for each aspect
-        aspect_categories = {}
-        for asp in aspects:
-            key = (asp["text"], asp["start"], asp["end"])
-            encoded = category_tokenizer(
-                asp["text"],
-                text,
-                truncation=True,
-                return_tensors="pt",
-            )
-            encoded = move_to_device(encoded, device)
-            with torch.no_grad():
-                logits = category_model(**encoded).logits
-            label_id = int(logits.argmax(dim=-1).item())
-            category = category_id2label[label_id]
-            aspect_categories[key] = category
+        def run_category_fallback() -> list[tuple[dict[str, int | str], dict[str, int | str], str]]:
+            if category_model is None or category_tokenizer is None or category_id2label is None:
+                return []
+            aspect_categories: dict[tuple[str, int, int], str] = {}
+            for asp in aspects:
+                key = (asp["text"], int(asp["start"]), int(asp["end"]))
+                encoded = category_tokenizer(
+                    asp["text"],
+                    text,
+                    truncation=True,
+                    return_tensors="pt",
+                )
+                encoded = move_to_device(encoded, device)
+                with torch.no_grad():
+                    logits = category_model(**encoded).logits
+                label_id = int(logits.argmax(dim=-1).item())
+                category = category_id2label[label_id]
+                aspect_categories[key] = category
+            pairs = []
+            for asp, opn in assign_opinions_to_aspects(aspects, opinions):
+                key = (asp["text"], int(asp["start"]), int(asp["end"]))
+                pairs.append((asp, opn, aspect_categories.get(key, "LAPTOP#GENERAL")))
+            return pairs
+
+        candidate_pairs: list[tuple[dict[str, int | str], dict[str, int | str], str]] = []
+        if relation_model is not None and relation_tokenizer is not None and relation_id2label is not None:
+            sep = relation_tokenizer.sep_token or "[SEP]"
+            seen_keys: set[tuple[int, int, int, int, str]] = set()
+            for asp in aspects:
+                for opn in opinions:
+                    marked = build_marked_text(text, asp, opn)
+                    pair_repr = f"{asp['text']} {sep} {opn['text']}".strip()
+                    encoded = relation_tokenizer(
+                        marked,
+                        pair_repr,
+                        truncation=True,
+                        return_tensors="pt",
+                    )
+                    encoded = move_to_device(encoded, device)
+                    with torch.no_grad():
+                        logits = relation_model(**encoded).logits
+                    label_id = int(logits.argmax(dim=-1).item())
+                    label = relation_id2label[label_id]
+                    key = (
+                        int(asp["start"]),
+                        int(asp["end"]),
+                        int(opn["start"]),
+                        int(opn["end"]),
+                        label,
+                    )
+                    if label == INVALID_CATEGORY:
+                        continue
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    candidate_pairs.append((asp, opn, label))
+            if not candidate_pairs:
+                LOGGER.debug("Relation 模型未產生有效配對，啟用 fallback 類別分類")
+                candidate_pairs = run_category_fallback()
+        else:
+            candidate_pairs = run_category_fallback()
 
         quadruplets = []
-        for asp, opn in assign_opinions_to_aspects(aspects, opinions):
-            key = (asp["text"], asp["start"], asp["end"])
-            category = aspect_categories.get(key, "LAPTOP#GENERAL")
+        for asp, opn, category in candidate_pairs:
             cache_key = (text, asp["text"], opn["text"])
             if cache_key not in cache:
                 cache[cache_key] = va_predictor.predict(text, asp["text"], opn["text"])

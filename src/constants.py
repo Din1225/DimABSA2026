@@ -64,3 +64,8 @@ ALL_CATEGORIES = build_categories()
 CATEGORY2ID = {label: idx for idx, label in enumerate(ALL_CATEGORIES)}
 ID2CATEGORY = {idx: label for label, idx in CATEGORY2ID.items()}
 
+# Relation labels (category + invalid for aspect-opinion pairing)
+INVALID_CATEGORY = "INVALID"
+RELATION_LABELS = ALL_CATEGORIES + [INVALID_CATEGORY]
+RELATION2ID = {label: idx for idx, label in enumerate(RELATION_LABELS)}
+ID2RELATION = {idx: label for label, idx in RELATION2ID.items()}
