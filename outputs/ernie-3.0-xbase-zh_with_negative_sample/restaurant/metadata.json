@@ -1,0 +1,7 @@
+{
+  "model_name": "nghuyong/ernie-3.0-xbase-zh",
+  "aspect_dir": "outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant/aspect_extractor",
+  "opinion_dir": "outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant/opinion_extractor",
+  "category_dir": "outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant/category_classifier",
+  "relation_dir": "outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant/relation_classifier"
+}
