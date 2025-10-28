@@ -1,0 +1,16 @@
+{
+  "base_model": "google/gemma-3-27b-it",
+  "train_paths": [
+    "data/train/zho_laptop_train_alltasks.jsonl"
+  ],
+  "eval_paths": [
+    "data/dev/zho_laptop_dev_task3.jsonl"
+  ],
+  "load_in_4bit": true,
+  "load_in_8bit": false,
+  "num_epochs": 5,
+  "max_length": 1024,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "lora_dropout": 0.05
+}

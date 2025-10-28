@@ -29,8 +29,8 @@ class VAPredictorConfig:
     model_name_or_path: str
     device: Optional[str] = None
     max_new_tokens: int = 7
-    temperature: float = 0.7
-    top_p: float = 0.9
+    temperature: float = 1
+    top_p: float = 0.95
     load_in_4bit: bool = False
     load_in_8bit: bool = False
     cache_dir: Optional[str] = None
@@ -143,6 +143,7 @@ class CodeStyleVAPredictor:
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
                 do_sample=True,
+                # do_sample=False,
                 pad_token_id=self.tokenizer.pad_token_id,
             )
         generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
