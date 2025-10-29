@@ -52,8 +52,8 @@ python -m src.train_task3 \
 python -m src.finetune_va \
   --train-path data/train/zho_laptop_train_alltasks.jsonl \
   --eval-path data/dev/zho_laptop_dev_task3.jsonl \
-  --output-dir outputs/gemma-3-27b-it/laptop_va_gemma-3-27b-it \
-  --base-model google/gemma-3-27b-it \
+  --output-dir outputs/Qwen3-14B/laptop_va_Qwen3-14B \
+  --base-model Qwen/Qwen3-14B \
   --cache-dir /workplace/Share/LLM_model \
   --num-epochs 5 \
   --per-device-train-batch-size 1 \
@@ -65,8 +65,8 @@ python -m src.finetune_va \
 python -m src.finetune_va \
   --train-path data/train/zho_restaurant_train_alltasks.jsonl \
   --eval-path data/dev/zho_restaurant_dev_task3.jsonl \
-  --output-dir outputs/gemma-3-27b-it/restaurant_va_gemma-3-27b-it \
-  --base-model google/gemma-3-27b-it \
+  --output-dir outputs/Qwen3-14B/restaurant_va_Qwen3-14B \
+  --base-model Qwen/Qwen3-14B \
   --cache-dir /workplace/Share/LLM_model \
   --num-epochs 5 \
   --per-device-train-batch-size 1 \
@@ -83,7 +83,7 @@ python -m src.predict_task3 \
   --model-root outputs/ernie-3.0-xbase-zh_with_negative_sample/laptop \
   --input-path data/dev/zho_laptop_dev_task3.jsonl \
   --output-path outputs/laptop_dev_pred.jsonl \
-  --va-model-name outputs/gemma-3-27b-it/laptop_va_gemma-3-27b-it \
+  --va-model-name outputs/Qwen3-14B/laptop_va_Qwen3-14B \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
@@ -94,7 +94,7 @@ python -m src.predict_task3 \
   --model-root outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant \
   --input-path data/dev/zho_restaurant_dev_task3.jsonl \
   --output-path outputs/restaurant_dev_pred.jsonl \
-  --va-model-name outputs/phi-4/restaurant_va_phi-4 \
+  --va-model-name outputs/Qwen3-14B/restaurant_va_Qwen3-14B \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
