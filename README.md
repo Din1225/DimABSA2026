@@ -3,14 +3,13 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 
 ## Pipeline 實作細節
 
-### Aspect-Opinion Extraction
-#### Dataset 與 BIO 標註
+### Dataset 與 BIO 標註
 - `constants.py` 定義 Aspect/Opinion BIO 標籤與所有合法的 `ENTITY#ATTRIBUTE` 組合。
 - `data_utils.extract_spans_from_quads` 從金標 quadruplet 內自動尋找每個 Aspect / Opinion 的文字與 `(start, end)` 位置。
 - `_encode_token_labels` 根據 tokenizer 的 `offset_mapping` 將 span 轉成 B-/I- 標籤，搭配 `TokenTaggingDataset` 打包成可餵進 HuggingFace `Trainer` 的資料。
 先對資料進行 BIO 標記，將 span 的形式變成 BIO 標籤的形式。
 
-#### 負樣本與配對資料
+### 負樣本與配對資料
 - `build_relation_dataset.py` 使用 K-fold cross-validation 先訓練簡易 BIO 模型，再在各驗證fold上進行推論，得到多個 span。
 - `build_pairs` 會組合：
   1. 金標 aspect-opinion + 正確類別 (正樣本)。
@@ -18,8 +17,8 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 用 K-fold cross-validation 的方式先訓練 BIO 模型，然後用訓練好的模型在驗證的fold上進行推論，會抓取到多個aspect和opinion。然後進行對多個aspect和opinion進行組合，只要不是正確配對，就標記成INVALID。每句可保留最多 10 筆負樣本，輸出成 JSONL 給 relation classifier 訓練使用。
 
 
-#### 訓練流程
-- `train_task3.py` 依序訓練三個子模型：
+### 訓練流程 (`train_task3.py`)
+依序訓練子模型：
   1. Aspect BIO tagger (`TokenTaggingDataset`，`AutoModelForTokenClassification`)。
   2. Opinion BIO tagger（同上）。
   3. Relation classifier (`AspectOpinionPairDataset`，`AutoModelForSequenceClassification`，含 `INVALID` 負樣本)。
@@ -32,7 +31,7 @@ Semeval 2026 比賽: https://github.com/DimABSA/DimABSA2026
 LLM：以 QLoRA SFT 方式微調。從訓練 JSONL 擷取所有 (Text, Aspect, Opinion, VA)，利用 build_instruct_prompt 組成統一指令，再把真實 V#A 直接接在 prompt 後，形成單一文字序列。然後將其tokenize。訓練參數num_epochs=5、per_device_train_batch_size=1、gradient_accumulation_steps=8、learning_rate=1e-4、warmup_ratio=0.05，最後儲存訓練好的 adapter。
 
 
-#### 推論 (`predict_task3.py`)
+### 推論 (`predict_task3.py`)
 1. 載入四個子模型（從 `metadata.json` 解析存放路徑）。
 2. 針對輸入文本：
    - 以 aspect/opinion tokenizer 取得 `offset_mapping`，送入模型並透過 `decode_bio` 轉回 span。
@@ -122,7 +121,7 @@ python -m src.finetune_va \
 
 產生的 LoRA 權重與 tokenizer 將儲存在 `--output-dir`，推論時請以 `--va-model-name` 指定該路徑。若 GPU 記憶體不足，可調整批次或加上 `--no-4bit/--load-in-8bit` 控制量化模式。
 
-> LLM 回覆需為單行 `Valence#Arousal`（小數點一位，如 `6.5#7.5`），推論腳本會限制輸出長度並自動補零。
+> LLM 回覆需為單行 `Valence#Arousal`（如 `6#7`），推論腳本會限制輸出長度並自動補零。
 
 ### 推論（筆電）
 ```bash
