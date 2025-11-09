@@ -128,8 +128,8 @@ python -m src.finetune_va \
 python -m src.predict_task3 \
   --model-root outputs/ernie-3.0-xbase-zh_with_negative_sample/laptop \
   --input-path data/dev/zho_laptop_dev_task3.jsonl \
-  --output-path outputs/laptop_dev_pred.jsonl \
-  --va-model-name outputs/Qwen3-14B/laptop_va_Qwen3-14B \
+  --output-path outputs/laptop_Llama-3.1-8B-Instruct_dev_pred.jsonl \
+  --va-model-name outputs/Llama-3.1-8B-Instruct/laptop_va_Llama-3.1-8B-Instruct \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
@@ -139,13 +139,20 @@ python -m src.predict_task3 \
 python -m src.predict_task3 \
   --model-root outputs/ernie-3.0-xbase-zh_with_negative_sample/restaurant \
   --input-path data/dev/zho_restaurant_dev_task3.jsonl \
-  --output-path outputs/restaurant_dev_pred.jsonl \
-  --va-model-name outputs/Qwen3-14B/restaurant_va_Qwen3-14B \
+  --output-path outputs/restaurant_Llama-3.1-8B-Instruct_dev_pred.jsonl \
+  --va-model-name outputs/Llama-3.1-8B-Instruct/restaurant_va_Llama-3.1-8B-Instruct \
   --va-cache-dir /workplace/Share/LLM_model \
   --va-load-in-4bit  # LoRA 預設以 4bit 訓練，可加此參數
 ```
 
 `src.predict_task3` 會順序完成 aspect/opinion 抽取、relation 分類（同時決定配對與類別）與 LLM-based VA 估計。若 relation 模型預測不到有效配對，系統會退回舊版類別分類流程。若要啟用 LLM，請提供本地或快取好的模型路徑，並確保與 `transformers` 相容。
+
+### VA mean ensemble
+```bash
+python -m src.va_llm_ensemble \
+  --input-paths outputs/restaurant_Llama-3.1-8B-Instruct_dev_pred.jsonl outputs/restaurant_phi-4_dev_pred.jsonl outputs/restaurant_Qwen3_dev_pred.jsonl \
+  --output-path outputs/VA_restaurant_mean_ensemble.jsonl
+```
 
 ### 後處理 VA 的數值 (筆電為例)
 ```bash
